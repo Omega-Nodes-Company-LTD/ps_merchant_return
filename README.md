@@ -19,7 +19,23 @@ modulo). La documentazione completa è nel
 Open-source e gratuito (AFL-3.0), brandizzato **OmegaNodes Company Ltd**.
 Installazione e supporto a richiesta → https://omeganodes.ai
 
-## Creare lo zip installabile
+## Release automatica (GitHub Action)
+Ad ogni push su **`main`**, il workflow [`.github/workflows/release.yml`](.github/workflows/release.yml):
+
+1. incrementa la versione patch (`$this->version` in `omeganodesrecesso.php`) e
+   committa il bump (`chore: release vX.Y.Z [skip ci]`);
+2. crea il tag `vX.Y.Z`;
+3. costruisce lo zip **`omeganodesrecesso-X.Y.Z.zip`** con la cartella
+   `omeganodesrecesso/` alla radice (esclusi solo i PDF probatori);
+4. pubblica una **GitHub Release** con lo zip allegato.
+
+> **Prerequisito.** Se `main` ha *branch protection* che blocca i push diretti,
+> il commit di bump del bot fallirà: consenti a **GitHub Actions** di pushare su
+> `main` (Settings → Branches → consenti il bypass per GitHub Actions, oppure
+> non proteggere i push diretti su `main`). I push effettuati con il
+> `GITHUB_TOKEN` non ritriggerano il workflow, quindi non si creano loop.
+
+## Creare lo zip installabile a mano
 ```bash
 cd ps_merchant_return
 zip -r omeganodesrecesso.zip omeganodesrecesso \
