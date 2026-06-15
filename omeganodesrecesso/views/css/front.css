@@ -1,0 +1,25 @@
+/**
+ * OmegaNodes — Diritto di Recesso (54-bis) — stili front.
+ *
+ * @author    OmegaNodes Company Ltd <https://omeganodes.ai>
+ * @copyright 2026 OmegaNodes Company Ltd
+ * @license   https://opensource.org/licenses/AFL-3.0
+ */
+.omega-recesso { margin: 1.5rem 0; }
+.omega-recesso .page-heading { margin-bottom: 1rem; }
+.omega-recesso .omega-intro { margin-bottom: 1.25rem; }
+.omega-recesso .omega-errors { margin: 0; padding-left: 1.2rem; }
+.omega-recesso .form-group { margin-bottom: 1rem; }
+.omega-recesso .omega-lines th,
+.omega-recesso .omega-lines td { vertical-align: middle; }
+.omega-recesso .omega-line-disabled { opacity: 0.55; }
+.omega-recesso .omega-ref { color: #777; font-size: 0.9em; }
+.omega-recesso .omega-note { color: #b35900; }
+.omega-recesso .omega-qty { max-width: 90px; }
+.omega-recesso .omega-next,
+.omega-recesso .omega-confirm { margin-top: 1rem; }
+.omega-recesso .omega-summary { margin: 1.25rem 0; padding: 1rem; border: 1px solid #e0e0e0; border-radius: 4px; }
+.omega-recesso .omega-total { font-size: 1.1rem; margin-top: 0.75rem; }
+.omega-recesso .omega-powered { margin-top: 2rem; }
+.omega-account-link .material-icons { vertical-align: middle; }
+.omega-recesso-footer-link { display: inline-block; margin: 0.5rem 0; }

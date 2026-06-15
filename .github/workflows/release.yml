@@ -1,0 +1,82 @@
+name: Release modulo (bump versione + zip)
+
+# Ad ogni push su main: incrementa la versione patch del modulo, committa il
+# bump, crea il tag vX.Y.Z e pubblica una GitHub Release con lo zip installabile
+# (cartella `omeganodesrecesso/` alla radice dell'archivio).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Evita di rilanciarsi sul proprio commit di bump.
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Bump versione patch
+        id: bump
+        run: |
+          set -euo pipefail
+          FILE="omeganodesrecesso/omeganodesrecesso.php"
+          CURRENT="$(grep -oP "this->version\s*=\s*'\K[0-9]+\.[0-9]+\.[0-9]+" "$FILE")"
+          if [ -z "$CURRENT" ]; then
+            echo "::error::Impossibile leggere la versione corrente da $FILE"
+            exit 1
+          fi
+          IFS='.' read -r MA MI PA <<< "$CURRENT"
+          NEW="${MA}.${MI}.$((PA + 1))"
+          sed -i -E "s/(this->version = ')[0-9]+\.[0-9]+\.[0-9]+(';)/\1${NEW}\2/" "$FILE"
+          # Verifica che il rewrite sia avvenuto.
+          grep -q "this->version = '${NEW}';" "$FILE"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "version=$NEW" >> "$GITHUB_OUTPUT"
+          echo "Bump: $CURRENT -> $NEW"
+
+      - name: Commit e push del bump
+        env:
+          NEW: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add omeganodesrecesso/omeganodesrecesso.php
+          git commit -m "chore: release v${NEW} [skip ci]"
+          git tag "v${NEW}"
+          git push origin HEAD:main
+          git push origin "v${NEW}"
+
+      - name: Crea lo zip installabile
+        env:
+          NEW: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          ZIP="omeganodesrecesso-${NEW}.zip"
+          # Cartella `omeganodesrecesso/` alla radice dello zip; esclusi solo i PDF probatori.
+          zip -r "$ZIP" omeganodesrecesso -x '*/storage/receipts/*.pdf' -x '*.DS_Store'
+          echo "Contenuto (top-level):"
+          unzip -l "$ZIP" | head -n 10
+
+      - name: Pubblica la GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "v${NEW}" "omeganodesrecesso-${NEW}.zip" \
+            --title "v${NEW}" \
+            --generate-notes

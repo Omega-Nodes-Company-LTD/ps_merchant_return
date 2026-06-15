@@ -1,0 +1,21 @@
+# Ricevute probatorie archiviate (mai nel repo)
+storage/receipts/*
+!storage/receipts/index.php
+!storage/receipts/.htaccess
+!storage/receipts/web.config
+
+# Dipendenze
+/vendor/
+node_modules/
+
+# Config locale generata da PrestaShop
+config.xml
+
+# Artefatti
+*.zip
+*.log
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.swp

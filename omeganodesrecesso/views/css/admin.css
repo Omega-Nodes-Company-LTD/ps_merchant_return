@@ -1,0 +1,10 @@
+/**
+ * OmegaNodes — Diritto di Recesso (54-bis) — stili admin.
+ *
+ * @author    OmegaNodes Company Ltd <https://omeganodes.ai>
+ * @copyright 2026 OmegaNodes Company Ltd
+ * @license   https://opensource.org/licenses/AFL-3.0
+ */
+.omega-admin-header { padding: 15px; }
+.omega-admin-logo { max-width: 100%; max-height: 64px; }
+.omega-admin-header pre { background: #f7f7f7; padding: 10px; border: 1px solid #e0e0e0; }
