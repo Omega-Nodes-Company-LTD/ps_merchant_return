@@ -30,7 +30,7 @@ class Omeganodesrecesso extends Module
     {
         $this->name = 'omeganodesrecesso';
         $this->tab = 'administration';
-        $this->version = '1.0.0';
+        $this->version = '1.0.1';
         $this->author = 'OmegaNodes Company Ltd';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = array('min' => '1.7.8.0', 'max' => '1.7.99.99');
