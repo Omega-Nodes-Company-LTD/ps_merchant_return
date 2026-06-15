@@ -1,0 +1,18 @@
+{shop_name}
+
+Right of withdrawal confirmation
+
+Dear {firstname} {lastname},
+
+we have registered your withdrawal declaration for order {order_reference}.
+
+Confirmation date and time: {confirmed_at}
+
+Attached you will find the receipt on a durable medium (PDF), pursuant to
+art. 54-bis of the Italian Consumer Code.
+
+The withdrawal declaration is valid regardless of the logistics of the return,
+which will be handled by the seller.
+
+--
+This email was generated automatically by {shop_name}.

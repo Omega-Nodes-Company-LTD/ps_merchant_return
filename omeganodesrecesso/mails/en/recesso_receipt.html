@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Withdrawal confirmation</title>
+</head>
+<body style="font-family: Arial, Helvetica, sans-serif; color: #222; background:#f4f4f4; margin:0; padding:20px;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px; margin:0 auto; background:#ffffff; border:1px solid #e0e0e0;">
+    <tr>
+      <td style="padding:20px; border-bottom:2px solid #222;">
+        <strong style="font-size:16px;">{shop_name}</strong>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:20px;">
+        <h2 style="margin-top:0;">Right of withdrawal confirmation</h2>
+        <p>Dear {firstname} {lastname},</p>
+        <p>we have registered your withdrawal declaration for order <strong>{order_reference}</strong>.</p>
+        <p><strong>Confirmation date and time:</strong> {confirmed_at}</p>
+        <p>Attached you will find the receipt on a durable medium (PDF), pursuant to art. 54-bis of the Italian Consumer Code.</p>
+        <p>The withdrawal declaration is valid regardless of the logistics of the return, which will be handled by the seller.</p>
+        <p style="margin-top:24px; color:#777; font-size:12px;">This email was generated automatically by {shop_name}.</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
