@@ -19,6 +19,9 @@ require_once _PS_MODULE_DIR_ . 'omeganodesrecesso/classes/OmegaRecessoRequest.ph
 
 class AdminOmegaRecessoController extends ModuleAdminController
 {
+    /** @var bool true durante l'export CSV (le callback restituiscono testo semplice) */
+    protected $omegaExporting = false;
+
     public function __construct()
     {
         $this->bootstrap = true;
@@ -143,9 +146,9 @@ class AdminOmegaRecessoController extends ModuleAdminController
     {
         $action = Tools::getValue('action');
 
-        if ($action === 'downloadReceipt') {
-            $this->processDownloadReceipt();
-        }
+        // action=downloadReceipt -> processDownloadReceipt() e' invocato dal core
+        // (AdminController::initProcess/postProcess, PS 1.7 e 9): chiamarlo anche
+        // qui duplicava gli errori ora che non termina piu' con die().
 
         if ($action === 'verifychain') {
             $this->runChainVerification(true);
@@ -177,25 +180,37 @@ class AdminOmegaRecessoController extends ModuleAdminController
         return $result;
     }
 
+    /**
+     * Download della ricevuta. Gli errori vanno in $this->errors e la pagina
+     * del back office viene mostrata normalmente (lista con l'avviso):
+     * Tools::displayError() e' deprecato in PrestaShop 9 (in debug lancia
+     * un'eccezione, altrimenti una pagina 500 senza layout).
+     */
     protected function processDownloadReceipt()
     {
         $id = (int) Tools::getValue('id_recesso');
         $record = new OmegaRecessoRequest($id);
 
         if (!Validate::isLoadedObject($record) || !$record->receipt_pdf_path) {
-            die(Tools::displayError('Ricevuta non disponibile.'));
+            $this->errors[] = $this->l('Ricevuta non disponibile.');
+
+            return;
         }
 
         // Multistore: impedisci accesso cross-shop.
         if (Shop::isFeatureActive()
             && Shop::getContext() === Shop::CONTEXT_SHOP
             && (int) $record->id_shop !== (int) $this->context->shop->id) {
-            die(Tools::displayError('Accesso non consentito.'));
+            $this->errors[] = $this->l('Accesso non consentito.');
+
+            return;
         }
 
         $path = $record->receipt_pdf_path;
         if (!file_exists($path) || !is_readable($path)) {
-            die(Tools::displayError('File ricevuta non trovato sul server.'));
+            $this->errors[] = $this->l('File ricevuta non trovato sul server.');
+
+            return;
         }
 
         $filename = 'ricevuta-recesso-' . $record->order_reference . '.pdf';
@@ -318,6 +333,25 @@ class AdminOmegaRecessoController extends ModuleAdminController
         return '<span class="badge badge-danger">' . $this->l('No') . '</span>';
     }
 
+    /**
+     * Export CSV: la colonna integrita' riporta l'esito leggibile (OK/KO) e
+     * l'hash SHA-256 della riga va in una colonna separata. processExport() del
+     * core usa il valore grezzo quando la callback restituisce HTML: in export
+     * le callback restituiscono quindi testo semplice.
+     */
+    public function processExport($text_delimiter = '"')
+    {
+        $this->omegaExporting = true;
+        $this->_select .= ', a.row_hash AS row_hash_export';
+        $this->fields_list['row_hash_export'] = array(
+            'title' => $this->l('Hash riga (SHA-256)'),
+            'search' => false,
+            'orderby' => false,
+        );
+
+        return parent::processExport($text_delimiter);
+    }
+
     public function callbackRowIntegrity($value, $row)
     {
         $lines = OmegaRecessoRequest::getLines((int) $row['id_recesso']);
@@ -339,7 +373,13 @@ class AdminOmegaRecessoController extends ModuleAdminController
             'prev_hash' => $row['prev_hash'],
         ));
 
-        if (hash_equals((string) $row['row_hash'], $recomputed)) {
+        $ok = hash_equals((string) $row['row_hash'], $recomputed);
+
+        if ($this->omegaExporting) {
+            return $ok ? 'OK' : 'KO';
+        }
+
+        if ($ok) {
             return '<span class="badge badge-success">' . $this->l('OK') . '</span>';
         }
 
