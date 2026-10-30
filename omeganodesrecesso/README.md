@@ -73,7 +73,7 @@ Moduli → *OmegaNodes — Diritto di Recesso (54-bis)* → **Configura**.
 | Nome mittente ricevuta | shop name | |
 | Link nel footer | No | Link "Diritto di recesso" sempre visibile nel footer. |
 | Powered by OmegaNodes | Sì | Attribuzione open-source discreta. |
-| Percorso archiviazione ricevute | interno modulo | Override consigliato per hosting che svuotano la cartella modulo; **fallback automatico su `var/`** se non scrivibile. |
+| Percorso archiviazione ricevute | `var/omeganodesrecesso/receipts` | Vuoto = predefinito, nella cartella `var/` di PrestaShop: **fuori dalla cartella del modulo** (le ricevute sopravvivono a cancellazione e reinstallazione del modulo) e non servita via web. Un percorso personalizzato deve stare fuori dal modulo e fuori dalla document root; **fallback automatico su `var/`** se non scrivibile. Il back office avvisa se l'archivio è dentro la cartella del modulo. |
 | Nota supporto (solo admin) | — | Mostrata solo in back office. |
 | Droppa tabelle alla disinstallazione | No | Se attivo, la disinstallazione cancella i dati probatori (implicazioni legali). |
 
@@ -82,18 +82,56 @@ Moduli → *OmegaNodes — Diritto di Recesso (54-bis)* → **Configura**.
 ## Sicurezza dello storage ricevute
 
 Le ricevute PDF sono servite **solo** dal back office tramite token; non esiste
-un link pubblico indovinabile (nome file = UUID v4). La cartella è protetta con
-`.htaccess`, `web.config` e un `index.php` di guardia.
+un link pubblico indovinabile (nome file = UUID v4). L'archivio predefinito è
+`var/omeganodesrecesso/receipts/<id_shop>/` nella cartella di PrestaShop:
+`var/` è già negata da PrestaShop (`var/.htaccess`) e il modulo aggiunge
+comunque `.htaccess`, `web.config` e un `index.php` di guardia.
 
-Su **Nginx** `.htaccess` non viene applicato: aggiungi questa regola come difesa
-in profondità (il path è comunque non linkato e servito solo via controller):
+Su **Nginx** `.htaccess` non viene applicato: la configurazione consigliata da
+PrestaShop nega già `/var/`; se la tua non lo fa, aggiungi (difesa in
+profondità, il path non è comunque linkato ed è servito solo via controller):
 
 ```nginx
+location ~ ^/var/ {
+    deny all;
+    return 404;
+}
+# Solo per le ricevute archiviate dalle versioni <= 1.0.2 nella cartella del modulo
 location ~* /modules/omeganodesrecesso/storage/ {
     deny all;
     return 404;
 }
 ```
+
+Includi la cartella delle ricevute nei **backup** insieme al database: il
+record probatorio riporta il percorso assoluto del PDF.
+
+### Aggiornamento dalla 1.0.2 (archivio ricevute)
+
+Fino alla 1.0.2 l'archivio predefinito era `modules/omeganodesrecesso/storage/receipts`:
+chi cancellava la cartella del modulo (es. prima di reinstallarlo) perdeva le
+ricevute. Lo script di aggiornamento alla 1.0.3:
+
+- se lo shop usa ancora il vecchio percorso predefinito, **copia** tutte le
+  ricevute in `var/omeganodesrecesso/receipts`, verifica ogni copia con
+  SHA-256 e solo allora aggiorna il percorso nei record e nella configurazione.
+  Il percorso del PDF non fa parte della catena hash: la verifica di integrità
+  resta OK. Gli originali **non vengono cancellati** (rimuovili a mano dopo aver
+  controllato backup e download dal back office);
+- se anche una sola copia non riesce, non cambia nulla (record e configurazione
+  restano sul vecchio percorso, errore nel log di PrestaShop e avviso nella
+  pagina di configurazione);
+- se hai impostato un **percorso personalizzato**, non sposta né copia nulla.
+
+### Cambio tema
+
+Cambiando tema PrestaShop riapplica le posizioni dei moduli definite dal tema
+(`theme.yml`) e sgancia i moduli non elencati: Classic e Hummingbird elencano
+`displayCustomerAccount` e `displayFooter`, quindi il pulsante di recesso
+sparirebbe dall'area cliente. Dalla 1.0.3 il modulo riaggancia automaticamente
+i propri hook subito dopo il cambio tema (hook `actionObjectShopUpdateAfter`).
+Per nascondere il link nel footer usa l'impostazione **Link nel footer**, non
+la pagina Posizioni: l'hook verrebbe ripristinato al successivo cambio tema.
 
 ---
 

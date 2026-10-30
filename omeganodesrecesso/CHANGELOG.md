@@ -5,6 +5,48 @@ Tutte le modifiche rilevanti a questo progetto sono documentate in questo file.
 Il formato si basa su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/)
 e il progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
+## [1.0.3] - 2026-10-30
+### Corretto
+- Conferma del recesso: il record probatorio viene salvato **prima** di
+  ricevuta PDF, reso nativo (`OrderReturn`) ed email. Prima, se il salvataggio
+  falliva (es. recapito più lungo di 255 caratteri), restavano un reso orfano,
+  un PDF e un'email "abbiamo registrato la tua dichiarazione" senza alcun
+  record. Dopo il salvataggio ogni passo registra subito il proprio esito sul
+  record (percorso PDF, reso, data di invio: campi esclusi dalla catena hash,
+  scritti una sola volta) e gli errori finiscono nel log di PrestaShop, anche
+  quelli non intercettabili (es. memoria esaurita durante il PDF).
+- Conferme concorrenti (doppio invio, più schede) serializzate per shop con un
+  lock: i residui vengono ricontrollati al momento del salvataggio, quindi non
+  si possono più dichiarare quantità oltre l'ordinato.
+- Il recapito per la ricevuta deve essere un'email valida (max 255 caratteri),
+  verificata già al passo 1; la pagina di esito indica gli indirizzi a cui la
+  ricevuta è stata davvero inviata.
+- Email della ricevuta su PrestaShop 1.7: mancava l'ora della conferma
+  (`Tools::displayDate()` ha firme diverse in 1.7 e 9). Oggetto traducibile,
+  riferimento della richiesta nell'email e nel PDF; se il PDF non è generabile
+  l'email non annuncia più un allegato inesistente, e se non è archiviabile su
+  disco viene comunque allegato.
+- Download della ricevuta dal back office: errori mostrati nella pagina invece
+  di `Tools::displayError()` (deprecato in PrestaShop 9: pagina 500 / eccezione).
+- Export CSV: la colonna integrità riporta `OK`/`KO` invece dell'hash grezzo;
+  l'hash SHA-256 è in una colonna separata.
+- Titolo (meta title) delle pagine della procedura: "Diritto di recesso",
+  "Conferma del recesso", "Recesso registrato" invece del nome dello shop.
+- Configurazione: nome mittente e nota supporto non vengono più salvati con una
+  barra rovesciata davanti agli apostrofi (doppio escape); l'aggiornamento
+  ripulisce i valori già salvati.
+- Il cambio tema non sgancia più il modulo da `displayCustomerAccount` e
+  `displayFooter`: gli hook vengono ripristinati automaticamente
+  (l'aggiornamento li ripristina anche sugli shop dove erano già spariti).
+
+### Modificato
+- Archivio predefinito delle ricevute PDF in `var/omeganodesrecesso/receipts`,
+  fuori dalla cartella del modulo (prima andava perso cancellando la cartella).
+  Aggiornando da 1.0.2 sul vecchio percorso predefinito le ricevute vengono
+  copiate e verificate (SHA-256) e i percorsi nei record aggiornati senza
+  toccare la catena hash; con un percorso personalizzato non cambia nulla.
+  Dettagli nel README.
+
 ## [1.0.2] - 2026-10-30
 ### Aggiunto
 - Compatibilità **PrestaShop 9.x** (PHP 8.1 – 8.4) mantenendo PrestaShop 1.7.8.x
