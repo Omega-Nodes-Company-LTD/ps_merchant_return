@@ -6,9 +6,14 @@
  * @copyright 2026 OmegaNodes Company Ltd
  * @license   https://opensource.org/licenses/AFL-3.0  Academic Free License 3.0 (AFL-3.0)
  *}
-<section id="omega-recesso" class="omega-recesso omega-step1">
-  <h1 class="page-heading">{l s='Diritto di recesso' d='Modules.Omeganodesrecesso.Front'}</h1>
+{extends file='page.tpl'}
 
+{block name='page_title'}
+  {l s='Diritto di recesso' d='Modules.Omeganodesrecesso.Front'}
+{/block}
+
+{block name='page_content'}
+<section id="omega-recesso" class="omega-recesso omega-step1">
   {if $omega_errors}
     <div class="alert alert-danger" role="alert">
       <ul class="omega-errors">
@@ -129,3 +134,4 @@
     <p class="omega-powered text-muted"><small>{l s='Powered by OmegaNodes' d='Modules.Omeganodesrecesso.Front'}</small></p>
   {/if}
 </section>
+{/block}

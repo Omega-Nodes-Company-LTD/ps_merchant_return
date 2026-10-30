@@ -6,9 +6,14 @@
  * @copyright 2026 OmegaNodes Company Ltd
  * @license   https://opensource.org/licenses/AFL-3.0  Academic Free License 3.0 (AFL-3.0)
  *}
-<section id="omega-recesso" class="omega-recesso omega-step2">
-  <h1 class="page-heading">{l s='Conferma del recesso' d='Modules.Omeganodesrecesso.Front'}</h1>
+{extends file='page.tpl'}
 
+{block name='page_title'}
+  {l s='Conferma del recesso' d='Modules.Omeganodesrecesso.Front'}
+{/block}
+
+{block name='page_content'}
+<section id="omega-recesso" class="omega-recesso omega-step2">
   {if $omega_warning}
     <div class="alert alert-warning" role="alert">
       {l s='Il termine di recesso di %d giorni potrebbe essere scaduto; la richiesta verra\' comunque registrata e valutata dal venditore.' sprintf=[$omega_order_status.periodo] d='Modules.Omeganodesrecesso.Front'}
@@ -62,3 +67,4 @@
     </button>
   </form>
 </section>
+{/block}

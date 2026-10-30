@@ -6,9 +6,14 @@
  * @copyright 2026 OmegaNodes Company Ltd
  * @license   https://opensource.org/licenses/AFL-3.0  Academic Free License 3.0 (AFL-3.0)
  *}
-<section id="omega-recesso" class="omega-recesso omega-confirm-result">
-  <h1 class="page-heading">{l s='Recesso registrato' d='Modules.Omeganodesrecesso.Front'}</h1>
+{extends file='page.tpl'}
 
+{block name='page_title'}
+  {l s='Recesso registrato' d='Modules.Omeganodesrecesso.Front'}
+{/block}
+
+{block name='page_content'}
+<section id="omega-recesso" class="omega-recesso omega-confirm-result">
   <div class="alert alert-success" role="status">
     {l s='La tua dichiarazione di recesso e\' stata registrata correttamente.' d='Modules.Omeganodesrecesso.Front'}
   </div>
@@ -44,3 +49,4 @@
     </div>
   </div>
 </section>
+{/block}
