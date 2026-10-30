@@ -1,8 +1,10 @@
 name: Release modulo (bump versione + zip)
 
-# Ad ogni push su main: incrementa la versione patch del modulo, committa il
-# bump, crea il tag vX.Y.Z e pubblica una GitHub Release con lo zip installabile
-# (cartella `omeganodesrecesso/` alla radice dell'archivio).
+# Ad ogni push su main: controlla la sintassi PHP (7.1 = minimo per PrestaShop
+# 1.7, 8.4 = massimo per PrestaShop 9), incrementa la versione patch del modulo,
+# committa il bump, crea il tag vX.Y.Z e pubblica una GitHub Release con due zip
+# installabili dallo stesso codice (uno per PrestaShop 1.7, uno per PrestaShop 9),
+# entrambi con la cartella `omeganodesrecesso/` alla radice dell'archivio.
 
 on:
   push:
@@ -27,6 +29,21 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: true
+
+      # Gate: se la sintassi non e' valida su PHP 7.1 o 8.4 non si fa ne' bump ne' release.
+      - name: Lint PHP 7.1 (PrestaShop 1.7) e PHP 8.4 (PrestaShop 9)
+        run: |
+          set -euo pipefail
+          for IMAGE in php:7.1-cli php:8.4-cli; do
+            echo "::group::$IMAGE"
+            docker run --rm -v "$PWD/omeganodesrecesso:/app:ro" -w /app "$IMAGE" sh -c '
+              status=0
+              for f in $(find . -name "*.php" -not -path "./vendor/*" -not -path "./.git/*"); do
+                php -l "$f" > /tmp/lint.out 2>&1 || { cat /tmp/lint.out; status=1; }
+              done
+              exit $status'
+            echo "::endgroup::"
+          done
 
       - name: Bump versione patch
         id: bump
@@ -60,16 +77,27 @@ jobs:
           git push origin HEAD:main
           git push origin "v${NEW}"
 
-      - name: Crea lo zip installabile
+      - name: Crea gli zip installabili
         env:
           NEW: ${{ steps.bump.outputs.version }}
         run: |
           set -euo pipefail
-          ZIP="omeganodesrecesso-${NEW}.zip"
-          # Cartella `omeganodesrecesso/` alla radice dello zip; esclusi solo i PDF probatori.
-          zip -r "$ZIP" omeganodesrecesso -x '*/storage/receipts/*.pdf' -x '*.DS_Store'
+          BUILD="$RUNNER_TEMP/build"
+          mkdir -p "$BUILD/omeganodesrecesso"
+          # Cartella `omeganodesrecesso/` alla radice dello zip; esclusi i PDF
+          # probatori e i file di sviluppo/sistema.
+          rsync -a \
+            --exclude='.git' --exclude='.github' --exclude='.gitattributes' --exclude='.gitignore' \
+            --exclude='*.zip' --exclude='.DS_Store' --exclude='._*' \
+            --exclude='storage/receipts/**.pdf' \
+            omeganodesrecesso/ "$BUILD/omeganodesrecesso/"
+          test -f "$BUILD/omeganodesrecesso/omeganodesrecesso.php" \
+            || { echo "::error::omeganodesrecesso.php non trovato nella radice del modulo"; exit 1; }
+          (cd "$BUILD" && zip -qr "$GITHUB_WORKSPACE/omeganodesrecesso-v${NEW}-ps9.zip" omeganodesrecesso)
+          # Stesso codice per entrambe le versioni di PrestaShop.
+          cp "omeganodesrecesso-v${NEW}-ps9.zip" "omeganodesrecesso-v${NEW}-ps1.7.zip"
           echo "Contenuto (top-level):"
-          unzip -l "$ZIP" | head -n 10
+          unzip -l "omeganodesrecesso-v${NEW}-ps9.zip" | head -n 15
 
       - name: Pubblica la GitHub Release
         env:
@@ -77,6 +105,20 @@ jobs:
           NEW: ${{ steps.bump.outputs.version }}
         run: |
           set -euo pipefail
-          gh release create "v${NEW}" "omeganodesrecesso-${NEW}.zip" \
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          ## Download
+
+          | PrestaShop | PHP | File |
+          |---|---|---|
+          | 9.x | 8.1 – 8.4 | \`omeganodesrecesso-v${NEW}-ps9.zip\` |
+          | 1.7.x (1.7.8+) | 7.1 – 7.4 | \`omeganodesrecesso-v${NEW}-ps1.7.zip\` |
+
+          Stesso codice, compatibile con entrambe le versioni: i due zip hanno lo stesso contenuto.
+          Installazione: **Moduli → Gestione moduli → Carica un modulo** e seleziona lo zip.
+          EOF
+          gh release create "v${NEW}" \
+            "omeganodesrecesso-v${NEW}-ps9.zip" \
+            "omeganodesrecesso-v${NEW}-ps1.7.zip" \
             --title "v${NEW}" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
             --generate-notes
