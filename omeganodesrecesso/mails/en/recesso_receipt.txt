@@ -6,6 +6,7 @@ Dear {firstname} {lastname},
 
 we have registered your withdrawal declaration for order {order_reference}.
 
+Request reference: #{request_id}
 Confirmation date and time: {confirmed_at}
 
 Attached you will find the receipt on a durable medium (PDF), pursuant to

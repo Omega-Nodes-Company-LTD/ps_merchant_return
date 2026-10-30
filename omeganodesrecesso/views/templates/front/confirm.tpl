@@ -42,7 +42,7 @@
       </table>
 
       {if $omega_receipt_sent}
-        <p class="omega-sent">{l s='Una ricevuta su supporto durevole e\' stata inviata a' d='Modules.Omeganodesrecesso.Front'} {$omega_contact_value|escape:'html':'UTF-8'}.</p>
+        <p class="omega-sent">{l s='Una ricevuta su supporto durevole e\' stata inviata a' d='Modules.Omeganodesrecesso.Front'} {$omega_receipt_recipients|escape:'html':'UTF-8'}.</p>
       {else}
         <p class="omega-sent text-muted">{l s='La richiesta e\' registrata. Se non ricevi l\'email, contatta il venditore: la tua dichiarazione resta comunque valida.' d='Modules.Omeganodesrecesso.Front'}</p>
       {/if}

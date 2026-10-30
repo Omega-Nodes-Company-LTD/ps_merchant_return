@@ -5,7 +5,11 @@
  * ObjectModel del record probatorio di recesso (append-only, catena hash
  * SHA-256, tamper-evident). Gestisce il record padre + le righe figlie in
  * un'unica transazione. Nessun update/delete e' consentito dal codice del
- * modulo: i metodi sono sovrascritti per lanciare eccezione.
+ * modulo: i metodi sono sovrascritti per lanciare eccezione. Unica eccezione
+ * controllata: i campi di esito (ricevuta PDF, invio email, OrderReturn), che
+ * non entrano nel row_hash, si registrano dopo l'inserimento e una sola volta
+ * (recordOutcome) o si aggiornano solo per la migrazione dell'archivio PDF
+ * (relocateReceipt).
  *
  * @author    OmegaNodes Company Ltd <https://omeganodes.ai>
  * @copyright 2026 OmegaNodes Company Ltd
@@ -18,6 +22,12 @@ if (!defined('_PS_VERSION_')) {
 
 class OmegaRecessoRequest extends ObjectModel
 {
+    /** Codice eccezione: quantita' richieste non piu' disponibili (residui esauriti). */
+    const ERROR_QUANTITY = 1001;
+
+    /** Codice eccezione: registro occupato da un'altra conferma (lock non ottenuto). */
+    const ERROR_BUSY = 1002;
+
     /** @var int */
     public $id_recesso;
     /** @var int */
@@ -114,7 +124,14 @@ class OmegaRecessoRequest extends ObjectModel
      *   Ogni riga: id_order_detail, id_customization, product_name,
      *   product_reference, product_quantity.
      *
-     * @throws PrestaShopException in caso di fallimento (con rollback)
+     * Le conferme dello stesso shop sono serializzate (lock nominale): la
+     * verifica dei residui, la lettura di prev_hash e l'inserimento avvengono
+     * senza che una conferma concorrente possa inserirsi in mezzo (niente
+     * quantita' richieste oltre l'ordinato, niente biforcazioni della catena).
+     *
+     * @throws PrestaShopException in caso di fallimento (con rollback); codice
+     *                             ERROR_QUANTITY se i residui non bastano piu',
+     *                             ERROR_BUSY se il registro resta occupato
      * @return OmegaRecessoRequest
      */
     public static function createFromConfirmation(array $data)
@@ -158,9 +175,23 @@ class OmegaRecessoRequest extends ObjectModel
         $obj->id_order_return = isset($data['id_order_return']) ? (int) $data['id_order_return'] : 0;
         $obj->created_at = date('Y-m-d H:i:s');
 
+        $lock = self::acquireLock($idShop);
+
         $db->execute('START TRANSACTION');
 
         try {
+            // Residui ricontrollati sotto lock: una conferma concorrente (doppio
+            // invio, altra scheda) potrebbe averli appena consumati.
+            $returnable = self::getReturnableQuantities($obj->id_order);
+            foreach ($lines as $line) {
+                $idDetail = (int) $line['id_order_detail'];
+                if (!isset($returnable[$idDetail])
+                    || (int) $line['product_quantity'] < 1
+                    || (int) $line['product_quantity'] > (int) $returnable[$idDetail]['returnable']) {
+                    throw new PrestaShopException('Quantita\' non piu\' disponibile per la riga ' . $idDetail . '.', self::ERROR_QUANTITY);
+                }
+            }
+
             // prev_hash = row_hash dell'ultimo record dello stesso shop (genesi = '').
             $obj->prev_hash = self::getLastRowHash($idShop);
 
@@ -201,10 +232,116 @@ class OmegaRecessoRequest extends ObjectModel
             $db->execute('COMMIT');
         } catch (Exception $e) {
             $db->execute('ROLLBACK');
-            throw new PrestaShopException('Creazione recesso fallita: ' . $e->getMessage());
+            self::releaseLock($lock);
+            $code = ($e instanceof PrestaShopException && $e->getCode() === self::ERROR_QUANTITY) ? self::ERROR_QUANTITY : 0;
+            throw new PrestaShopException('Creazione recesso fallita: ' . $e->getMessage(), $code);
         }
 
+        self::releaseLock($lock);
+
         return $obj;
+    }
+
+    /**
+     * Lock nominale MySQL/MariaDB per serializzare le conferme di uno shop.
+     * Il nome include database e prefisso (i lock nominali valgono per tutto il
+     * server). Ritorna il nome del lock, o null se il server non supporta i lock
+     * nominali (si procede comunque: il recesso non deve mai essere bloccato).
+     *
+     * @throws PrestaShopException (ERROR_BUSY) se il lock non si ottiene entro il timeout
+     */
+    protected static function acquireLock($idShop)
+    {
+        $name = 'omega_recesso_' . md5(_DB_NAME_ . '|' . _DB_PREFIX_ . '|' . (int) $idShop);
+
+        try {
+            $got = Db::getInstance()->getValue('SELECT GET_LOCK(\'' . pSQL($name) . '\', 15)', false);
+        } catch (Exception $e) {
+            PrestaShopLogger::addLog('OmegaRecesso: lock nominale non disponibile: ' . $e->getMessage(), 2);
+
+            return null;
+        }
+
+        if ($got === null || $got === false) {
+            return null;
+        }
+        if ((int) $got !== 1) {
+            throw new PrestaShopException('Registro di recesso occupato, riprovare.', self::ERROR_BUSY);
+        }
+
+        return $name;
+    }
+
+    protected static function releaseLock($name)
+    {
+        if ($name === null) {
+            return;
+        }
+
+        try {
+            Db::getInstance()->getValue('SELECT RELEASE_LOCK(\'' . pSQL($name) . '\')', false);
+        } catch (Exception $e) {
+            // Il lock viene comunque rilasciato alla chiusura della connessione.
+        }
+    }
+
+    /* =========================================================================
+     * ESITO DELLE OPERAZIONI SUCCESSIVE ALLA CONFERMA
+     * ===================================================================== */
+
+    /**
+     * Registra l'esito di ricevuta PDF, email e OrderReturn sul record gia'
+     * inserito. Questi campi NON entrano nel row_hash (la catena resta valida) e
+     * si scrivono una sola volta: l'update e' condizionato al valore "vuoto"
+     * iniziale, quindi un esito gia' registrato non puo' essere riscritto.
+     *
+     * Chiavi ammesse in $fields: receipt_pdf_path, receipt_sent_at, id_order_return.
+     *
+     * @return bool true se tutti i campi passati sono stati registrati
+     */
+    public static function recordOutcome($idRecesso, array $fields)
+    {
+        $db = Db::getInstance();
+        $table = _DB_PREFIX_ . 'omega_recesso_request';
+        $ok = true;
+
+        foreach ($fields as $field => $value) {
+            if ($field === 'receipt_pdf_path') {
+                $sql = 'UPDATE `' . $table . '` SET `receipt_pdf_path` = \'' . pSQL(Tools::substr((string) $value, 0, 255)) . '\'
+                        WHERE `id_recesso` = ' . (int) $idRecesso . ' AND `receipt_pdf_path` = \'\'';
+            } elseif ($field === 'receipt_sent_at') {
+                $sql = 'UPDATE `' . $table . '` SET `receipt_sent_at` = \'' . pSQL((string) $value) . '\'
+                        WHERE `id_recesso` = ' . (int) $idRecesso . ' AND `receipt_sent_at` IS NULL';
+            } elseif ($field === 'id_order_return') {
+                $sql = 'UPDATE `' . $table . '` SET `id_order_return` = ' . (int) $value . '
+                        WHERE `id_recesso` = ' . (int) $idRecesso . ' AND `id_order_return` = 0';
+            } else {
+                throw new PrestaShopException('Append-only: il campo ' . $field . ' non e\' modificabile.');
+            }
+
+            $ok = $db->execute($sql) && $db->Affected_Rows() === 1 && $ok;
+        }
+
+        return $ok;
+    }
+
+    /**
+     * Aggiorna il percorso della ricevuta dopo una copia verificata in un altro
+     * archivio (migrazione). receipt_pdf_path non entra nel row_hash.
+     *
+     * @return bool
+     */
+    public static function relocateReceipt($idRecesso, $oldPath, $newPath)
+    {
+        $db = Db::getInstance();
+        $ok = $db->execute(
+            'UPDATE `' . _DB_PREFIX_ . 'omega_recesso_request`
+             SET `receipt_pdf_path` = \'' . pSQL(Tools::substr((string) $newPath, 0, 255)) . '\'
+             WHERE `id_recesso` = ' . (int) $idRecesso . '
+               AND `receipt_pdf_path` = \'' . pSQL((string) $oldPath) . '\''
+        );
+
+        return $ok && $db->Affected_Rows() === 1;
     }
 
     /* =========================================================================

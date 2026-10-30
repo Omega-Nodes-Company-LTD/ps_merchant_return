@@ -1,0 +1,19 @@
+{shop_name}
+
+Conferma del diritto di recesso
+
+Gentile {firstname} {lastname},
+
+abbiamo registrato la tua dichiarazione di recesso per l'ordine {order_reference}.
+
+Riferimento richiesta: #{request_id}
+Data e ora della conferma: {confirmed_at}
+
+Questa email costituisce la ricevuta su supporto durevole della tua
+dichiarazione di recesso, ai sensi dell'art. 54-bis del Codice del consumo.
+
+La dichiarazione di recesso e' valida a prescindere dalla gestione logistica
+del reso, che sara' curata dal venditore.
+
+--
+Questa email e' stata generata automaticamente da {shop_name}.

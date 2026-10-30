@@ -25,6 +25,7 @@
 <div class="omega-pdf-title">{$title|escape:'html':'UTF-8'}</div>
 
 <table class="omega-pdf-meta">
+  {if $request_id}<tr><td><strong>{l s='Riferimento richiesta' d='Modules.Omeganodesrecesso.Pdf'}:</strong></td><td>#{$request_id|intval}</td></tr>{/if}
   <tr><td><strong>{l s='Riferimento ordine' d='Modules.Omeganodesrecesso.Pdf'}:</strong></td><td>{$order_reference|escape:'html':'UTF-8'}</td></tr>
   <tr><td><strong>{l s='Data ordine' d='Modules.Omeganodesrecesso.Pdf'}:</strong></td><td>{$order_date|escape:'html':'UTF-8'}</td></tr>
   <tr><td><strong>{l s='Data e ora della conferma' d='Modules.Omeganodesrecesso.Pdf'}:</strong></td><td><strong>{$confirmed_at_formatted|escape:'html':'UTF-8'}</strong></td></tr>

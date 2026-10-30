@@ -27,6 +27,12 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
     /** @var string */
     public $page_name = 'omeganodesrecesso';
 
+    /** @var string meta title del passaggio mostrato (step 1, step 2, esito) */
+    protected $omegaMetaTitle = '';
+
+    /** @var string passo post-registrazione in corso ('' = nessuno) */
+    protected $omegaPendingStep = '';
+
     public function initContent()
     {
         parent::initContent();
@@ -46,6 +52,29 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
             // Visualizzazione step 1 (default) ed eventuale "carica righe"/"trova ordine".
             $this->displayStep1();
         }
+
+        $this->assignMetaTitle();
+    }
+
+    /**
+     * Meta title del passaggio mostrato. Senza una voce in Preferenze > SEO e URL
+     * il core usa il nome dello shop per tutte le pagine del controller; la
+     * variabile "page" e' gia' assegnata da parent::initContent(), qui si
+     * aggiorna solo il titolo (PS 1.7 e 9, tutti i temi: {$page.meta.title}).
+     */
+    protected function assignMetaTitle()
+    {
+        if ($this->omegaMetaTitle === '') {
+            return;
+        }
+
+        $page = $this->context->smarty->getTemplateVars('page');
+        if (!is_array($page)) {
+            return;
+        }
+
+        $page['meta']['title'] = $this->omegaMetaTitle;
+        $this->context->smarty->assign('page', $page);
     }
 
     /* =========================================================================
@@ -287,6 +316,7 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
             'omega_contact_value' => $defaultContact,
         ));
 
+        $this->omegaMetaTitle = $this->module->l('Diritto di recesso', 'recesso');
         $this->setTemplate('module:omeganodesrecesso/views/templates/front/step1.tpl');
     }
 
@@ -324,6 +354,15 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
             $contact = $ctx['email'];
         }
 
+        if (!$this->isValidContact($contact)) {
+            $this->displayStep1(
+                array($this->module->l('Inserisci un indirizzo email valido per la ricevuta.', 'recesso')),
+                array('customer_contact' => $contact)
+            );
+
+            return;
+        }
+
         $selection = $this->parseSelection($order);
         if (empty($selection)) {
             $this->displayStep1(
@@ -359,7 +398,19 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
             'omega_warning' => $status['show_warning'],
         ));
 
+        $this->omegaMetaTitle = $this->module->l('Conferma del recesso', 'recesso');
         $this->setTemplate('module:omeganodesrecesso/views/templates/front/step2.tpl');
+    }
+
+    /**
+     * Il recapito e' l'indirizzo a cui inviare la ricevuta (campo "email"):
+     * deve essere un'email valida e stare nella colonna del record (255).
+     * Prima veniva accettato qualunque testo: un valore troppo lungo faceva
+     * fallire la registrazione solo alla conferma.
+     */
+    protected function isValidContact($contact)
+    {
+        return Validate::isEmail($contact) && Tools::strlen($contact) <= 255;
     }
 
     /**
@@ -468,6 +519,11 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
         if ($contact === '') {
             $contact = $ctx['email'];
         }
+        if (!$this->isValidContact($contact)) {
+            $this->displayStep1(array($this->module->l('Inserisci un indirizzo email valido per la ricevuta.', 'recesso')));
+
+            return;
+        }
 
         // Momento ESATTO del click di conferma (coerente tra PDF, record ed email).
         $confirmedAt = date('Y-m-d H:i:s');
@@ -476,33 +532,9 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
         $currency = new Currency((int) $order->id_currency);
         $idLang = (int) $order->id_lang;
 
-        // 1) contract_snapshot
-        $snapshot = $this->buildContractSnapshot($order, $selection, $currency);
-
-        // 2) PDF ricevuta (UUID) con fallback storage
-        $uuid = OmegaReceiptGenerator::uuidv4();
-        $dirInfo = $this->module->resolveReceiptDir($idShop);
-        $pdfPath = $dirInfo['dir'] . '/' . $uuid . '.pdf';
-
-        $receiptData = $this->buildReceiptData($order, $ctx, $contact, $selection, $confirmedAt, $currency);
-        $pdfOk = OmegaReceiptGenerator::createPdf($receiptData, $pdfPath);
-        if (!$pdfOk) {
-            PrestaShopLogger::addLog('OmegaRecesso: generazione PDF ricevuta fallita per ordine ' . (int) $order->id, 2, null, 'OmegaRecessoRequest', (int) $order->id);
-            $pdfPath = '';
-        }
-
-        // 3) OrderReturn parziale nativo (best-effort, non blocca la conformita')
-        $idOrderReturn = $this->createOrderReturn($order, $ctx['id_customer'], $selection);
-
-        // 4) Email immediata con PDF allegato
-        $sentAt = null;
-        if ($this->sendReceiptEmail($order, $ctx, $contact, $confirmedAt, $pdfPath, $idLang)) {
-            $sentAt = date('Y-m-d H:i:s');
-        } else {
-            PrestaShopLogger::addLog('OmegaRecesso: invio email ricevuta fallito per ordine ' . (int) $order->id, 2, null, 'OmegaRecessoRequest', (int) $order->id);
-        }
-
-        // 5) Insert atomico padre + righe (append-only, hash chain)
+        // 1) Insert atomico padre + righe (append-only, hash chain) PRIMA di ogni
+        //    effetto esterno: se la registrazione fallisce non nascono reso, PDF
+        //    o email che dichiarano "registrato".
         try {
             $record = OmegaRecessoRequest::createFromConfirmation(array(
                 'id_shop' => $idShop,
@@ -513,34 +545,138 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
                 'customer_lastname' => $ctx['lastname'],
                 'customer_email' => $ctx['email'],
                 'customer_contact' => $contact,
-                'contract_snapshot' => $snapshot,
+                'contract_snapshot' => $this->buildContractSnapshot($order, $selection, $currency),
                 'client_ip' => Tools::getRemoteAddr(),
                 'user_agent' => isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '',
                 'confirmed_at' => $confirmedAt,
-                'receipt_pdf_path' => $pdfPath,
-                'receipt_sent_at' => $sentAt,
-                'id_order_return' => (int) $idOrderReturn,
                 'lines' => $selection,
             ));
         } catch (Exception $e) {
-            PrestaShopLogger::addLog('OmegaRecesso: errore creazione record: ' . $e->getMessage(), 3, null, 'OmegaRecessoRequest', (int) $order->id);
-            $this->displayStep1(array($this->module->l('Si e\' verificato un errore durante la registrazione. Riprova o contatta il venditore.', 'recesso')));
+            $quantityConflict = ($e->getCode() === OmegaRecessoRequest::ERROR_QUANTITY);
+            PrestaShopLogger::addLog('OmegaRecesso: errore creazione record: ' . $e->getMessage(), $quantityConflict ? 2 : 3, null, 'Order', (int) $order->id, true);
+            if ($quantityConflict) {
+                // Residui consumati nel frattempo (es. doppio invio della conferma).
+                $this->displayStep1(array($this->module->l('Le quantita\' selezionate non sono piu\' disponibili. Verifica i residui aggiornati.', 'recesso')));
+            } else {
+                $this->displayStep1(array($this->module->l('Si e\' verificato un errore durante la registrazione. Riprova o contatta il venditore.', 'recesso')));
+            }
 
             return;
         }
 
-        // 6) Esito
+        // Da qui il recesso e' registrato: ogni passo successivo e' best-effort,
+        // registra il proprio esito sul record (campi fuori dal row_hash) appena
+        // riuscito e logga gli errori, senza mai impedire la pagina di esito.
+        $idRecesso = (int) $record->id;
+
+        // Errori non intercettabili (memoria esaurita, die() di TCPDF): il record
+        // resta valido con gli esiti gia' registrati e l'interruzione va nel log.
+        $this->omegaPendingStep = 'ricevuta PDF';
+        $controller = $this;
+        register_shutdown_function(function () use ($controller, $idRecesso) {
+            $controller->logInterruptedOutcome($idRecesso);
+        });
+
+        // 2) PDF ricevuta (UUID) con fallback storage. Il PDF generato viene
+        //    allegato all'email anche se non e' stato possibile archiviarlo.
+        $pdfContent = '';
+        try {
+            $receiptData = $this->buildReceiptData($order, $ctx, $contact, $selection, $confirmedAt, $currency, $idRecesso);
+            $pdfContent = OmegaReceiptGenerator::renderPdf($receiptData);
+            if ($pdfContent === '') {
+                $this->logOutcomeError('generazione PDF ricevuta fallita', $idRecesso, 3);
+            } else {
+                $dirInfo = $this->module->resolveReceiptDir($idShop);
+                $pdfPath = $dirInfo['dir'] . '/' . OmegaReceiptGenerator::uuidv4() . '.pdf';
+                if (!OmegaReceiptGenerator::savePdf($pdfContent, $pdfPath)) {
+                    $this->logOutcomeError('archiviazione PDF ricevuta fallita (' . $pdfPath . ')', $idRecesso, 3);
+                } elseif (!OmegaRecessoRequest::recordOutcome($idRecesso, array('receipt_pdf_path' => $pdfPath))) {
+                    $this->logOutcomeError('percorso PDF non registrato (' . $pdfPath . ')', $idRecesso, 3);
+                } elseif ($dirInfo['fallback']) {
+                    $this->logOutcomeError('ricevuta archiviata nel fallback ' . $pdfPath . ' (percorso configurato non scrivibile)', $idRecesso, 2);
+                }
+            }
+        } catch (Throwable $e) {
+            $this->logOutcomeError('ricevuta PDF: ' . $e->getMessage(), $idRecesso, 3);
+        }
+
+        // 3) OrderReturn parziale nativo (best-effort, non blocca la conformita')
+        $this->omegaPendingStep = 'OrderReturn';
+        try {
+            $idOrderReturn = $this->createOrderReturn($order, $ctx['id_customer'], $selection);
+            if ($idOrderReturn && !OmegaRecessoRequest::recordOutcome($idRecesso, array('id_order_return' => $idOrderReturn))) {
+                $this->logOutcomeError('OrderReturn #' . (int) $idOrderReturn . ' non registrato sul record', $idRecesso, 2);
+            }
+        } catch (Throwable $e) {
+            $this->logOutcomeError('OrderReturn: ' . $e->getMessage(), $idRecesso, 2);
+        }
+
+        // 4) Email immediata con PDF allegato
+        $this->omegaPendingStep = 'email ricevuta';
+        $recipients = array();
+        try {
+            $recipients = $this->sendReceiptEmail($order, $ctx, $contact, $confirmedAt, $pdfContent, $idLang, $idRecesso);
+            if (!$recipients) {
+                $this->logOutcomeError('invio email ricevuta fallito', $idRecesso, 3);
+            } elseif (!OmegaRecessoRequest::recordOutcome($idRecesso, array('receipt_sent_at' => date('Y-m-d H:i:s')))) {
+                $this->logOutcomeError('data di invio email non registrata', $idRecesso, 2);
+            }
+        } catch (Throwable $e) {
+            $recipients = array();
+            $this->logOutcomeError('invio email ricevuta: ' . $e->getMessage(), $idRecesso, 3);
+        }
+
+        $this->omegaPendingStep = '';
+
+        // 5) Esito
         $this->context->smarty->assign(array(
-            'omega_record_id' => (int) $record->id,
+            'omega_record_id' => $idRecesso,
             'omega_order_reference' => $order->reference,
             'omega_confirmed_at' => $confirmedAt,
             'omega_email_value' => $ctx['email'],
             'omega_contact_value' => $contact,
             'omega_selection' => $selection,
-            'omega_receipt_sent' => ($sentAt !== null),
+            'omega_receipt_sent' => !empty($recipients),
+            'omega_receipt_recipients' => implode(', ', $recipients),
         ));
 
+        $this->omegaMetaTitle = $this->module->l('Recesso registrato', 'recesso');
         $this->setTemplate('module:omeganodesrecesso/views/templates/front/confirm.tpl');
+    }
+
+    /**
+     * Shutdown: se la richiesta si e' interrotta durante un passo successivo
+     * alla registrazione, lo segnala nel log (il record resta valido).
+     */
+    public function logInterruptedOutcome($idRecesso)
+    {
+        if ($this->omegaPendingStep === '') {
+            return;
+        }
+
+        $error = error_get_last();
+        $fatal = $error && in_array($error['type'], array(E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR), true);
+        $this->logOutcomeError(
+            'elaborazione interrotta durante: ' . $this->omegaPendingStep
+            . ($fatal ? ' (' . $error['message'] . ')' : ''),
+            $idRecesso,
+            3
+        );
+    }
+
+    /**
+     * Log di un passo non riuscito dopo la registrazione del recesso.
+     */
+    protected function logOutcomeError($message, $idRecesso, $severity)
+    {
+        PrestaShopLogger::addLog(
+            'OmegaRecesso: recesso #' . (int) $idRecesso . ' registrato, ' . $message,
+            (int) $severity,
+            null,
+            'OmegaRecessoRequest',
+            (int) $idRecesso,
+            true
+        );
     }
 
     /* =========================================================================
@@ -585,7 +721,7 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
         );
     }
 
-    protected function buildReceiptData(Order $order, array $ctx, $contact, array $selection, $confirmedAt, Currency $currency)
+    protected function buildReceiptData(Order $order, array $ctx, $contact, array $selection, $confirmedAt, Currency $currency, $idRecesso = 0)
     {
         $shop = $this->context->shop;
         $logoRect = _PS_MODULE_DIR_ . 'omeganodesrecesso/views/img/logo-omeganodes-rect.png';
@@ -610,6 +746,7 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
             'shop_name' => Configuration::get('PS_SHOP_NAME'),
             'logo_path' => file_exists($logoRect) ? $logoRect : '',
             'logo_powered' => (bool) Configuration::get('OMEGA_REC_POWERED_BY'),
+            'request_id' => (int) $idRecesso,
             'order_reference' => $order->reference,
             'order_date' => $order->date_add,
             'confirmed_at' => $confirmedAt,
@@ -660,7 +797,12 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
      * EMAIL RICEVUTA
      * ===================================================================== */
 
-    protected function sendReceiptEmail(Order $order, array $ctx, $contact, $confirmedAt, $pdfPath, $idLang)
+    /**
+     * Invia la ricevuta via email (PDF allegato se generato).
+     *
+     * @return string[] destinatari a cui e' stata inviata (vuoto se l'invio e' fallito)
+     */
+    protected function sendReceiptEmail(Order $order, array $ctx, $contact, $confirmedAt, $pdfContent, $idLang, $idRecesso)
     {
         $recipients = array();
         if (Validate::isEmail($ctx['email'])) {
@@ -670,7 +812,7 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
             $recipients[Tools::strtolower($contact)] = $contact;
         }
         if (empty($recipients)) {
-            return false;
+            return array();
         }
 
         $fromName = Configuration::get('OMEGA_REC_MAIL_FROM_NAME');
@@ -678,30 +820,42 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
             $fromName = Configuration::get('PS_SHOP_NAME');
         }
 
+        // Data e ora complete nel formato della lingua dell'email. Non si usa
+        // Tools::displayDate($date, true): in PS 1.7 il secondo parametro e'
+        // $id_lang (deprecato) e l'ora veniva omessa; in PS 9 e' $full.
+        $language = new Language((int) $idLang);
+        $dateFormat = Validate::isLoadedObject($language) && $language->date_format_full
+            ? $language->date_format_full
+            : 'Y-m-d H:i:s';
+
         $templateVars = array(
             '{firstname}' => $ctx['firstname'],
             '{lastname}' => $ctx['lastname'],
             '{order_reference}' => $order->reference,
-            '{confirmed_at}' => Tools::displayDate($confirmedAt, true),
+            '{confirmed_at}' => date($dateFormat, strtotime($confirmedAt)),
+            '{request_id}' => (int) $idRecesso,
             '{shop_name}' => Configuration::get('PS_SHOP_NAME'),
         );
 
+        // Senza PDF si usa il template che non annuncia l'allegato.
+        $template = 'recesso_receipt_nopdf';
         $attachment = null;
-        if ($pdfPath !== '' && file_exists($pdfPath)) {
+        if ($pdfContent !== '') {
+            $template = 'recesso_receipt';
             $attachment = array(
-                'content' => Tools::file_get_contents($pdfPath),
+                'content' => $pdfContent,
                 'name' => 'ricevuta-recesso-' . $order->reference . '.pdf',
                 'mime' => 'application/pdf',
             );
         }
 
-        $subject = sprintf('Conferma recesso ordine %s', $order->reference);
+        $subject = sprintf($this->module->l('Conferma recesso ordine %s', 'recesso'), $order->reference);
 
         $toList = array_values($recipients);
 
-        return (bool) Mail::Send(
+        $sent = Mail::Send(
             (int) $idLang,
-            'recesso_receipt',
+            $template,
             $subject,
             $templateVars,
             $toList,
@@ -714,6 +868,8 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
             false,
             (int) $order->id_shop
         );
+
+        return $sent ? $toList : array();
     }
 
     /* =========================================================================

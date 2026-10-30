@@ -121,7 +121,7 @@
 
       <div class="form-group">
         <label for="omega_contact">{l s='Recapito per la ricevuta (email)' d='Modules.Omeganodesrecesso.Front'}</label>
-        <input type="text" id="omega_contact" name="customer_contact" class="form-control" value="{$omega_contact_value|escape:'html':'UTF-8'}">
+        <input type="email" id="omega_contact" name="customer_contact" class="form-control" maxlength="255" value="{$omega_contact_value|escape:'html':'UTF-8'}">
       </div>
 
       <button type="submit" name="submitStep1" class="btn btn-primary btn-lg omega-next">

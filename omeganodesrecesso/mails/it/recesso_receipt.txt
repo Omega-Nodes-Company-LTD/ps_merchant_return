@@ -6,6 +6,7 @@ Gentile {firstname} {lastname},
 
 abbiamo registrato la tua dichiarazione di recesso per l'ordine {order_reference}.
 
+Riferimento richiesta: #{request_id}
 Data e ora della conferma: {confirmed_at}
 
 In allegato trovi la ricevuta su supporto durevole in formato PDF, ai sensi

@@ -29,6 +29,20 @@ class OmegaReceiptGenerator
      */
     public static function createPdf(array $data, $absolutePath)
     {
+        $content = self::renderPdf($data);
+
+        return $content !== '' && self::savePdf($content, $absolutePath);
+    }
+
+    /**
+     * Genera il PDF in memoria.
+     *
+     * @param array $data dati da assegnare al template
+     *
+     * @return string contenuto PDF, '' se la generazione e' fallita
+     */
+    public static function renderPdf(array $data)
+    {
         // Il sottosistema PDF non deve MAI far fallire la registrazione legale:
         // qualunque errore qui viene catturato e segnalato come "PDF non generato".
         try {
@@ -37,18 +51,31 @@ class OmegaReceiptGenerator
             $pdf = new PDF((object) $data, 'OmegaRecessoReceipt', $smarty);
             $content = $pdf->render(false);
 
-            if (!is_string($content) || $content === '') {
-                return false;
-            }
-
-            $bytes = @file_put_contents($absolutePath, $content);
-
-            return $bytes !== false && $bytes > 0;
+            return is_string($content) ? $content : '';
         } catch (Throwable $e) {
             PrestaShopLogger::addLog('OmegaRecesso: eccezione generazione PDF: ' . $e->getMessage(), 3);
 
+            return '';
+        }
+    }
+
+    /**
+     * Scrive il PDF su disco e verifica che il file contenga esattamente $content.
+     *
+     * @return bool true se il file e' stato scritto
+     */
+    public static function savePdf($content, $absolutePath)
+    {
+        $bytes = @file_put_contents($absolutePath, $content);
+        if ($bytes === false || $bytes !== strlen($content)) {
+            if (is_file($absolutePath)) {
+                @unlink($absolutePath); // niente file troncati nell'archivio
+            }
+
             return false;
         }
+
+        return true;
     }
 
     /**
