@@ -59,13 +59,27 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
             . (string) $this->context->cookie->id_guest
             . (int) $this->context->shop->id;
 
-        return Tools::substr(Tools::encrypt($seed), 0, 40);
+        // HMAC con la chiave dello shop (Tools::encrypt() non esiste piu' in PrestaShop 9).
+        return Tools::substr(hash_hmac('sha256', $seed, _COOKIE_KEY_), 0, 40);
     }
 
     protected function checkCsrf()
     {
         return (bool) Tools::getValue('omega_token')
             && hash_equals($this->getCsrfToken(), (string) Tools::getValue('omega_token'));
+    }
+
+    /* =========================================================================
+     * FORMATTAZIONE PREZZI
+     * ===================================================================== */
+
+    /**
+     * Importo formattato nella valuta indicata tramite il Locale del contesto
+     * (Tools::displayPrice() e' deprecato da PS 1.7.6 e rimosso in PrestaShop 9).
+     */
+    protected function formatAmount($amount, Currency $currency)
+    {
+        return $this->context->getCurrentLocale()->formatPrice((float) $amount, $currency->iso_code);
     }
 
     /* =========================================================================
@@ -200,7 +214,7 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
                 'already_requested' => (int) $row['already_requested'],
                 'returnable' => (int) $row['returnable'],
                 'unit_price' => $unit,
-                'unit_price_formatted' => Tools::displayPrice($unit, $currency),
+                'unit_price_formatted' => $this->formatAmount($unit, $currency),
             );
         }
 
@@ -340,7 +354,7 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
             'omega_contact_value' => $contact,
             'omega_reference_value' => $order->reference,
             'omega_selection' => $selection,
-            'omega_total_formatted' => Tools::displayPrice($total, $currency),
+            'omega_total_formatted' => $this->formatAmount($total, $currency),
             'omega_order_status' => $status,
             'omega_warning' => $status['show_warning'],
         ));
@@ -585,8 +599,8 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
                 'product_name' => $line['product_name'],
                 'product_reference' => $line['product_reference'],
                 'quantity' => (int) $line['product_quantity'],
-                'unit_price_formatted' => Tools::displayPrice($line['unit_price'], $currency),
-                'line_total_formatted' => Tools::displayPrice($lineTotal, $currency),
+                'unit_price_formatted' => $this->formatAmount($line['unit_price'], $currency),
+                'line_total_formatted' => $this->formatAmount($lineTotal, $currency),
             );
         }
 
@@ -604,7 +618,7 @@ class OmeganodesrecessoRecessoModuleFrontController extends ModuleFrontControlle
             'customer_email' => $ctx['email'],
             'customer_contact' => $contact,
             'lines' => $lines,
-            'total_formatted' => Tools::displayPrice($total, $currency),
+            'total_formatted' => $this->formatAmount($total, $currency),
         );
     }
 

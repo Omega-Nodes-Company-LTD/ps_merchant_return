@@ -33,7 +33,7 @@ class Omeganodesrecesso extends Module
         $this->version = '1.0.1';
         $this->author = 'OmegaNodes Company Ltd';
         $this->need_instance = 0;
-        $this->ps_versions_compliancy = array('min' => '1.7.8.0', 'max' => '1.7.99.99');
+        $this->ps_versions_compliancy = array('min' => '1.7.8.0', 'max' => '9.99.99');
         $this->bootstrap = true;
 
         parent::__construct();

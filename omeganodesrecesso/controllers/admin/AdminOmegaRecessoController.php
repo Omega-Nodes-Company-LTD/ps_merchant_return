@@ -93,6 +93,16 @@ class AdminOmegaRecessoController extends ModuleAdminController
         $this->_defaultOrderWay = 'DESC';
     }
 
+    /**
+     * Traduzione compatibile PS 1.7 / PS 9: AdminController::l() non esiste piu'
+     * in PrestaShop 9, si delega a Module::l() (presente in entrambe le versioni).
+     * Firma identica a quella di AdminController::l() di PS 1.7.
+     */
+    protected function l($string, $class = null, $addslashes = false, $htmlentities = true)
+    {
+        return $this->module->l($string, 'AdminOmegaRecessoController');
+    }
+
     /* =========================================================================
      * TOOLBAR — niente "Aggiungi", piu' "Verifica integrita' catena"
      * ===================================================================== */
@@ -108,6 +118,21 @@ class AdminOmegaRecessoController extends ModuleAdminController
             'desc' => $this->l('Verifica integrita\' catena'),
             'icon' => 'process-icon-refresh',
         );
+    }
+
+    public function initToolbar()
+    {
+        parent::initToolbar();
+
+        // Anche nella toolbar della lista: nessun "Aggiungi" (record creati solo dal front).
+        unset($this->toolbar_btn['new']);
+    }
+
+    public function setMedia($isNewTheme = false)
+    {
+        parent::setMedia($isNewTheme);
+
+        $this->addCSS(_MODULE_DIR_ . 'omeganodesrecesso/views/css/admin.css');
     }
 
     /* =========================================================================
@@ -242,7 +267,7 @@ class AdminOmegaRecessoController extends ModuleAdminController
             'snapshot_pretty' => json_encode($snapshot, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'has_receipt' => $hasReceipt,
             'download_link' => self::$currentIndex . '&id_recesso=' . (int) $id . '&action=downloadReceipt&token=' . $this->token,
-            'order_link' => $this->context->link->getAdminLink('AdminOrders') . '&id_order=' . (int) $record->id_order . '&vieworder',
+            'order_link' => $this->getOrderViewLink((int) $record->id_order),
         ));
 
         return $this->context->smarty->fetch(
@@ -256,9 +281,24 @@ class AdminOmegaRecessoController extends ModuleAdminController
 
     public function callbackOrderLink($value, $row)
     {
-        $url = $this->context->link->getAdminLink('AdminOrders') . '&id_order=' . (int) $value . '&vieworder';
+        $url = $this->getOrderViewLink((int) $value);
 
         return '<a href="' . Tools::safeOutput($url) . '">' . (int) $value . '</a>';
+    }
+
+    /**
+     * Link al dettaglio ordine in BO. La pagina ordini e' Symfony (PS 1.7.7+ e 9):
+     * i parametri vanno passati a getAdminLink() per ottenere la rotta di dettaglio
+     * (accodarli all'URL porterebbe alla lista ordini).
+     */
+    protected function getOrderViewLink($idOrder)
+    {
+        return $this->context->link->getAdminLink(
+            'AdminOrders',
+            true,
+            array(),
+            array('id_order' => (int) $idOrder, 'vieworder' => 1)
+        );
     }
 
     public function callbackLinesSummary($value, $row)

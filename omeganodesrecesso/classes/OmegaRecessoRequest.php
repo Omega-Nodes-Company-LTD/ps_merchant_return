@@ -61,24 +61,25 @@ class OmegaRecessoRequest extends ObjectModel
         'table' => 'omega_recesso_request',
         'primary' => 'id_recesso',
         'multilang' => false,
+        // Validatore 'isString' (Validate::isAnything() non esiste piu' in PrestaShop 9).
         'fields' => array(
             'id_shop' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedId', 'required' => true),
             'id_order' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedId', 'required' => true),
             'id_customer' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedId'),
-            'order_reference' => array('type' => self::TYPE_STRING, 'validate' => 'isAnything', 'size' => 16, 'required' => true),
-            'customer_firstname' => array('type' => self::TYPE_STRING, 'validate' => 'isAnything', 'size' => 255, 'required' => true),
-            'customer_lastname' => array('type' => self::TYPE_STRING, 'validate' => 'isAnything', 'size' => 255, 'required' => true),
+            'order_reference' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 16, 'required' => true),
+            'customer_firstname' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 255, 'required' => true),
+            'customer_lastname' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 255, 'required' => true),
             'customer_email' => array('type' => self::TYPE_STRING, 'validate' => 'isEmail', 'size' => 255, 'required' => true),
-            'customer_contact' => array('type' => self::TYPE_STRING, 'validate' => 'isAnything', 'size' => 255, 'required' => true),
-            'contract_snapshot' => array('type' => self::TYPE_STRING, 'validate' => 'isAnything', 'required' => true),
-            'client_ip' => array('type' => self::TYPE_STRING, 'validate' => 'isAnything', 'size' => 45, 'required' => true),
-            'user_agent' => array('type' => self::TYPE_STRING, 'validate' => 'isAnything', 'size' => 512),
+            'customer_contact' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 255, 'required' => true),
+            'contract_snapshot' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'required' => true),
+            'client_ip' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 45, 'required' => true),
+            'user_agent' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 512),
             'confirmed_at' => array('type' => self::TYPE_DATE, 'validate' => 'isDate', 'required' => true),
-            'receipt_pdf_path' => array('type' => self::TYPE_STRING, 'validate' => 'isAnything', 'size' => 255),
+            'receipt_pdf_path' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 255),
             'receipt_sent_at' => array('type' => self::TYPE_DATE, 'validate' => 'isDate', 'allow_null' => true),
             'id_order_return' => array('type' => self::TYPE_INT, 'validate' => 'isUnsignedId'),
-            'prev_hash' => array('type' => self::TYPE_STRING, 'validate' => 'isAnything', 'size' => 64),
-            'row_hash' => array('type' => self::TYPE_STRING, 'validate' => 'isAnything', 'size' => 64, 'required' => true),
+            'prev_hash' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 64),
+            'row_hash' => array('type' => self::TYPE_STRING, 'validate' => 'isString', 'size' => 64, 'required' => true),
             'created_at' => array('type' => self::TYPE_DATE, 'validate' => 'isDate', 'required' => true),
         ),
     );
@@ -272,10 +273,11 @@ class OmegaRecessoRequest extends ObjectModel
      */
     public static function getLastRowHash($idShop)
     {
+        // Niente LIMIT esplicito: Db::getValue() aggiunge gia' "LIMIT 1".
         $value = Db::getInstance()->getValue(
             'SELECT row_hash FROM ' . _DB_PREFIX_ . 'omega_recesso_request
              WHERE id_shop = ' . (int) $idShop . '
-             ORDER BY id_recesso DESC LIMIT 1'
+             ORDER BY id_recesso DESC'
         );
 
         return $value ? $value : '';
@@ -365,10 +367,11 @@ class OmegaRecessoRequest extends ObjectModel
      */
     public static function getLastConfirmedAt($idOrder)
     {
+        // Niente LIMIT esplicito: Db::getValue() aggiunge gia' "LIMIT 1".
         return Db::getInstance()->getValue(
             'SELECT confirmed_at FROM ' . _DB_PREFIX_ . 'omega_recesso_request
              WHERE id_order = ' . (int) $idOrder . '
-             ORDER BY id_recesso DESC LIMIT 1'
+             ORDER BY id_recesso DESC'
         );
     }
 
