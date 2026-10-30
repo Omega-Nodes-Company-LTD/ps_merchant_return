@@ -1,6 +1,6 @@
 # OmegaNodes — Diritto di Recesso (54-bis) per PrestaShop
 
-Modulo PrestaShop **1.7.8.11+** che rende un e-commerce B2C conforme al nuovo
+Modulo PrestaShop **1.7.8+ e 9.x** che rende un e-commerce B2C conforme al nuovo
 **art. 54-bis del Codice del consumo** (Dlgs 209/2025, recepimento della
 direttiva UE 2023/2673), in vigore dal **19 giugno 2026**.
 
@@ -37,15 +37,21 @@ gestione dei residui) e l'aggancio al sistema **RMA nativo** di PrestaShop
 
 ## Requisiti
 
-- PrestaShop **1.7.8.11+** (target API 1.7.8)
-- PHP **7.4+**
+- PrestaShop **1.7.8.x** (testato su 1.7.8.11) con PHP **7.1 – 7.4**
+- PrestaShop **9.x** (testato su 9.0.1, temi Classic e Hummingbird) con PHP **8.1 – 8.4**
 - MySQL/MariaDB con supporto `utf8mb4`
+
+Stesso codice per entrambe le versioni: ogni release pubblica due zip con lo
+stesso contenuto, `omeganodesrecesso-vX.Y.Z-ps1.7.zip` (PrestaShop 1.7) e
+`omeganodesrecesso-vX.Y.Z-ps9.zip` (PrestaShop 9).
 
 ---
 
 ## Installazione
 
-1. Scarica lo zip della release (cartella `omeganodesrecesso/` alla radice).
+1. Scarica lo zip della release adatto alla tua versione (`-ps9.zip` per
+   PrestaShop 9, `-ps1.7.zip` per PrestaShop 1.7; cartella `omeganodesrecesso/`
+   alla radice).
 2. Back office → **Moduli → Carica un modulo** → seleziona lo zip.
 3. Installa. Verranno create le tabelle probatorie, la voce di menu sotto
    **Ordini** e la cartella protetta per le ricevute.
@@ -116,12 +122,14 @@ servizio professionale OmegaNodes.
 
 ## English (summary)
 
-PrestaShop 1.7.8.11+ module that makes a B2C store compliant with the new
+PrestaShop 1.7.8+ and 9.x module that makes a B2C store compliant with the new
 art. 54-bis of the Italian Consumer Code (in force from 19 June 2026): a
 prominent withdrawal button, a strict **two-step** procedure, an **immediate
 receipt on a durable medium** (email + timestamped PDF) and **append-only
 evidential storage** with a SHA-256 hash chain. Supports partial withdrawal and
 native `OrderReturn` (RMA) integration. Free and open-source (AFL-3.0).
+Each release ships the same code as two zips: `-ps1.7.zip` (PrestaShop 1.7.8+,
+PHP 7.1–7.4) and `-ps9.zip` (PrestaShop 9.x, PHP 8.1–8.4).
 Paid installation/support on request → https://omeganodes.ai
 
 The module provides the technical compliance mechanism only. Legal texts,
