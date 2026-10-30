@@ -97,7 +97,7 @@ jobs:
           # Stesso codice per entrambe le versioni di PrestaShop.
           cp "omeganodesrecesso-v${NEW}-ps9.zip" "omeganodesrecesso-v${NEW}-ps1.7.zip"
           echo "Contenuto (top-level):"
-          unzip -l "omeganodesrecesso-v${NEW}-ps9.zip" | head -n 15
+          unzip -l "omeganodesrecesso-v${NEW}-ps9.zip" | sed -n '1,15p'
 
       - name: Pubblica la GitHub Release
         env:
