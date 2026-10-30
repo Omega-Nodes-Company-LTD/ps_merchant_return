@@ -24,6 +24,7 @@ class Omeganodesrecesso extends Module
         'displayOrderDetail',
         'actionFrontControllerSetMedia',
         'displayFooter',
+        'actionObjectShopUpdateAfter',
     );
 
     public function __construct()
@@ -142,7 +143,8 @@ class Omeganodesrecesso extends Module
             'OMEGA_REC_MAIL_FROM_NAME' => Configuration::get('PS_SHOP_NAME'),
             'OMEGA_REC_SHOW_FOOTER_LINK' => 0,
             'OMEGA_REC_POWERED_BY' => 1,
-            'OMEGA_REC_STORAGE_PATH' => $this->getDefaultStoragePath(),
+            // Vuoto = percorso predefinito (getDefaultStoragePath), fuori dalla cartella del modulo.
+            'OMEGA_REC_STORAGE_PATH' => '',
             'OMEGA_REC_SUPPORT_NOTE' => 'Hai bisogno di installazione o supporto? Contatta OmegaNodes — https://omeganodes.ai',
             'OMEGA_REC_DROP_ON_UNINSTALL' => 0,
         );
@@ -178,9 +180,39 @@ class Omeganodesrecesso extends Module
      * STORAGE RICEVUTE PDF
      * ===================================================================== */
 
+    /**
+     * Archivio predefinito delle ricevute: var/ di PrestaShop, fuori dalla
+     * cartella del modulo (sopravvive a cancellazione/reinstallazione del
+     * modulo) e non servito via web (var/ e' negato da PrestaShop; il modulo
+     * aggiunge comunque .htaccess, web.config e index.php).
+     */
     public function getDefaultStoragePath()
     {
+        return rtrim(_PS_ROOT_DIR_, '/') . '/var/' . $this->name . '/receipts';
+    }
+
+    /**
+     * Archivio predefinito fino alla 1.0.2, dentro la cartella del modulo: le
+     * ricevute andavano perse cancellando la cartella (es. prima di reinstallare).
+     */
+    public function getLegacyStoragePath()
+    {
         return rtrim(_PS_MODULE_DIR_, '/') . '/' . $this->name . '/storage/receipts';
+    }
+
+    /**
+     * True se il percorso e' dentro la cartella del modulo (ricevute a rischio).
+     */
+    public function isInsideModuleDir($path)
+    {
+        $moduleDir = rtrim(_PS_MODULE_DIR_, '/') . '/' . $this->name;
+        $path = rtrim((string) $path, '/');
+        $real = @realpath($path);
+        $realModule = @realpath($moduleDir);
+
+        return $path === $moduleDir
+            || strpos($path . '/', $moduleDir . '/') === 0
+            || ($real && $realModule && strpos($real . '/', $realModule . '/') === 0);
     }
 
     /**
@@ -263,7 +295,11 @@ class Omeganodesrecesso extends Module
         }
 
         // Fallback su var/ di PrestaShop (sempre scrivibile): mai perdere la ricevuta.
-        $fallback = rtrim(_PS_ROOT_DIR_, '/') . '/var/omeganodesrecesso/receipts/' . (int) $idShop;
+        $fallback = $this->getDefaultStoragePath() . '/' . (int) $idShop;
+        if ($fallback === $base) {
+            // Il percorso configurato e' gia' quello predefinito: nessun'altra cartella da provare.
+            return array('dir' => $base, 'fallback' => false);
+        }
         $this->createStorage($fallback);
 
         return array('dir' => $fallback, 'fallback' => true);
@@ -512,6 +548,40 @@ class Omeganodesrecesso extends Module
             . '">' . $this->l('Diritto di recesso') . '</a></div>';
     }
 
+    /**
+     * Il cambio tema (ThemeManager::enable, PS 1.7 e 9) riapplica le posizioni
+     * di theme.yml (global_settings.hooks.modules_to_hook) e sgancia i moduli
+     * non elencati: Classic e Hummingbird elencano displayCustomerAccount e
+     * displayFooter, quindi il pulsante di recesso sparirebbe dall'area cliente.
+     * Subito dopo il core salva lo shop (Shop::update): qui il modulo riaggancia
+     * i propri hook mancanti. registerHook() salta quelli gia' presenti.
+     */
+    public function hookActionObjectShopUpdateAfter($params)
+    {
+        if (empty($params['object']) || !Validate::isLoadedObject($params['object'])) {
+            return;
+        }
+
+        $this->restoreHooks(array((int) $params['object']->id));
+    }
+
+    /**
+     * Registra gli hook del modulo eventualmente mancanti (idempotente).
+     *
+     * @param int[]|null $shopList shop interessati (null = tutti)
+     *
+     * @return bool
+     */
+    public function restoreHooks($shopList = null)
+    {
+        $ok = true;
+        foreach ($this->moduleHooks as $hook) {
+            $ok = $this->registerHook($hook, $shopList) && $ok;
+        }
+
+        return $ok;
+    }
+
     /* =========================================================================
      * CONFIGURAZIONE (getContent)
      * ===================================================================== */
@@ -544,21 +614,24 @@ class Omeganodesrecesso extends Module
             $partenza = 'delivery';
         }
 
-        $storagePath = trim((string) Tools::getValue('OMEGA_REC_STORAGE_PATH'));
-        if ($storagePath === '') {
-            $storagePath = $this->getDefaultStoragePath();
+        // Vuoto o uguale al predefinito -> salvato vuoto: segue il predefinito.
+        $storagePath = rtrim(trim((string) Tools::getValue('OMEGA_REC_STORAGE_PATH')), '/');
+        if ($storagePath === $this->getDefaultStoragePath()) {
+            $storagePath = '';
         }
 
+        // Niente pSQL(): Configuration::updateValue() fa gia' l'escape (prima gli
+        // apostrofi venivano salvati con una barra rovesciata, es. "dell\'Arte").
         $values = array(
             'OMEGA_REC_PERIODO_GIORNI' => $periodo,
             'OMEGA_REC_GRACE_GIORNI' => max(0, (int) Tools::getValue('OMEGA_REC_GRACE_GIORNI')),
             'OMEGA_REC_DATA_PARTENZA' => $partenza,
             'OMEGA_REC_MOSTRA_OLTRE' => (int) (bool) Tools::getValue('OMEGA_REC_MOSTRA_OLTRE'),
-            'OMEGA_REC_MAIL_FROM_NAME' => pSQL(Tools::getValue('OMEGA_REC_MAIL_FROM_NAME')),
+            'OMEGA_REC_MAIL_FROM_NAME' => (string) Tools::getValue('OMEGA_REC_MAIL_FROM_NAME'),
             'OMEGA_REC_SHOW_FOOTER_LINK' => (int) (bool) Tools::getValue('OMEGA_REC_SHOW_FOOTER_LINK'),
             'OMEGA_REC_POWERED_BY' => (int) (bool) Tools::getValue('OMEGA_REC_POWERED_BY'),
             'OMEGA_REC_STORAGE_PATH' => $storagePath,
-            'OMEGA_REC_SUPPORT_NOTE' => pSQL(Tools::getValue('OMEGA_REC_SUPPORT_NOTE')),
+            'OMEGA_REC_SUPPORT_NOTE' => (string) Tools::getValue('OMEGA_REC_SUPPORT_NOTE'),
             'OMEGA_REC_DROP_ON_UNINSTALL' => (int) (bool) Tools::getValue('OMEGA_REC_DROP_ON_UNINSTALL'),
         );
 
@@ -575,7 +648,7 @@ class Omeganodesrecesso extends Module
         }
 
         // Ricrea/protegge lo storage al nuovo path.
-        $this->createStorage($storagePath);
+        $this->createStorage($this->getStorageBasePath());
 
         return $this->displayConfirmation($this->l('Impostazioni salvate.'));
     }
@@ -583,14 +656,24 @@ class Omeganodesrecesso extends Module
     protected function renderStorageWarning()
     {
         $base = $this->getStorageBasePath();
-        if ($this->createStorage($base) && is_writable($base)) {
-            return '';
+        $output = '';
+
+        if ($this->isInsideModuleDir($base)) {
+            $output .= $this->displayWarning(
+                $this->l('Le ricevute PDF sono archiviate dentro la cartella del modulo:') . ' ' . Tools::safeOutput($base) . '. '
+                . $this->l('Cancellando la cartella del modulo (es. prima di reinstallarlo) le ricevute andrebbero perse. Lascia vuoto il percorso per usare quello predefinito, fuori dal modulo:') . ' '
+                . Tools::safeOutput($this->getDefaultStoragePath())
+            );
         }
 
-        return $this->displayWarning(
-            $this->l('La cartella di archiviazione ricevute non e\' scrivibile:') . ' ' . $base . '. '
-            . $this->l('Le ricevute verranno salvate automaticamente nel fallback var/ di PrestaShop. Configura un percorso scrivibile per evitare il fallback.')
-        );
+        if (!$this->createStorage($base) || !is_writable($base)) {
+            $output .= $this->displayWarning(
+                $this->l('La cartella di archiviazione ricevute non e\' scrivibile:') . ' ' . Tools::safeOutput($base) . '. '
+                . $this->l('Le ricevute verranno salvate automaticamente nel fallback var/ di PrestaShop. Configura un percorso scrivibile per evitare il fallback.')
+            );
+        }
+
+        return $output;
     }
 
     protected function renderSupportNote()
@@ -665,7 +748,7 @@ class Omeganodesrecesso extends Module
                 'type' => 'text',
                 'label' => $this->l('Percorso archiviazione ricevute PDF'),
                 'name' => 'OMEGA_REC_STORAGE_PATH',
-                'desc' => $this->l('Percorso assoluto. Override consigliato per hosting che svuotano la cartella modulo a ogni deploy. Fallback automatico su var/ se non scrivibile.'),
+                'desc' => $this->l('Percorso assoluto, fuori dalla cartella del modulo e non raggiungibile via web. Lascia vuoto per il predefinito:') . ' ' . $this->getDefaultStoragePath() . '. ' . $this->l('Fallback automatico su var/ se non scrivibile. Includi la cartella nei backup.'),
             ),
             array(
                 'type' => 'textarea',
